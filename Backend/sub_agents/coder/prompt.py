@@ -22,6 +22,33 @@ Rules:
 4. **NO MARKDOWN OUTPUT**: Do NOT output the code in markdown blocks like ```python ... ```.
 5. **TOOL CALL ONLY**: Your response MUST be a tool call to `create_cad_model` with the code as the argument.
 
+**SECTION MARKERS (REQUIRED)**:
+Each distinct component of your model MUST be labeled with a section comment.
+Use the format: `# === COMPONENT_NAME ===`
+
+Example structure:
+```
+with BuildPart() as model:
+    # === BODY ===
+    Box(20, 15, 25)
+    
+    # === HEAD ===
+    with Locations((0, 0, 28)):
+        Box(30, 25, 25)
+    
+    # === LEGS ===
+    with Locations((5, 0, -12.5), (-5, 0, -12.5)):
+        Cylinder(radius=4, height=10)
+    
+    # === ARMS ===
+    with Locations((10, 0, 0)):
+        Cylinder(radius=3, height=12)
+
+result = model.part
+```
+
+Common section names: BODY, HEAD, LEGS, ARMS, TAIL, ANTENNA, WINGS, WHEELS, BASE, TOP, EYES, EARS, NECK
+
 Common Pitfalls:
 - Do not mix Part/Sketch contexts without projection.
 - `Area` is not a class; use `Face` or `Sketch`.
@@ -132,3 +159,36 @@ Anti-Patterns (DO NOT DO):
 - If modification is not possible, return an error via text explaining why.
 """)
 
+
+SECTION_MODIFICATION_PROMPT = textwrap.dedent("""
+You are modifying a SINGLE SECTION of a 3D model's build123d code.
+Your task is to apply the requested change to ONLY this section.
+
+**TARGET SECTION: {section_name}**
+
+**SECTION CODE:**
+```python
+{section_code}
+```
+
+**MODIFICATION REQUEST:**
+{modification_prompt}
+
+**RAG CONTEXT:**
+{rag_context}
+
+## YOUR TASK
+
+Modify the section code above to fulfill the request. Return ONLY the modified section code.
+
+Rules:
+1. Return ONLY the code for the {section_name} section - no imports, no result=, no other sections
+2. Keep the same basic structure and variable references
+3. Only change what's needed to fulfill the modification request
+4. Preserve indentation style
+
+**CRITICAL**:
+- CALL `create_cad_model(script_code="...")` with ONLY the modified section code.
+- Do NOT include the section marker comment (# === {section_name} ===) - the system adds it.
+- Do NOT include code from other sections.
+""")

@@ -10,7 +10,14 @@ from typing import Optional
 from google.adk.agents import LlmAgent
 from tools.rag_tool import RAGTool
 from tools.cad_tools import create_cad_model
-from .prompt import SYSTEM_PROMPT, MODIFICATION_PROMPT
+from .prompt import SYSTEM_PROMPT, MODIFICATION_PROMPT, SECTION_MODIFICATION_PROMPT
+from .section_parser import (
+    parse_sections,
+    get_section,
+    replace_section,
+    list_sections,
+    identify_target_section
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +83,50 @@ def get_modifier_agent(
     return LlmAgent(
         model=model_name,
         name="ModifierAgent",
+        instruction=formatted_instruction,
+        tools=[rag_tool.query, create_cad_model]
+    )
+
+
+def get_section_modifier_agent(
+    section_name: str,
+    section_code: str,
+    modification_prompt: str,
+    rag_context: str = "",
+    model_name: str = "gemini-3-pro-preview",
+    rag_tool: Optional[RAGTool] = None
+) -> LlmAgent:
+    """Initialize a modifier agent for a single section only.
+    
+    This agent only sees and modifies one section of the code,
+    ensuring other sections remain completely unchanged.
+
+    Args:
+        section_name: The name of the target section (e.g., "LEGS").
+        section_code: Just the code for this section.
+        modification_prompt: The user's modification request.
+        rag_context: Context from RAG tool.
+        model_name: The LLM model to use.
+        rag_tool: Optional pre-initialized RAGTool.
+
+    Returns:
+        LlmAgent: Configured for section-only modification.
+    """
+    if rag_tool is None:
+        rag_tool = RAGTool()
+
+    formatted_instruction = SECTION_MODIFICATION_PROMPT.format(
+        section_name=section_name,
+        section_code=section_code,
+        modification_prompt=modification_prompt,
+        rag_context=rag_context if rag_context else "No additional context available."
+    )
+
+    logger.info(f"Creating section modifier for {section_name}: {modification_prompt[:50]}...")
+
+    return LlmAgent(
+        model=model_name,
+        name="SectionModifierAgent",
         instruction=formatted_instruction,
         tools=[rag_tool.query, create_cad_model]
     )
@@ -306,3 +357,78 @@ class CodeModifier:
             model_name=self.model_name,
             rag_tool=self.rag_tool
         )
+
+    def create_section_modifier_agent(
+        self,
+        existing_code: str,
+        modification_prompt: str
+    ) -> tuple[Optional[LlmAgent], Optional[str], Optional[str]]:
+        """Create a section-specific modifier agent.
+        
+        Identifies the target section from the modification request,
+        extracts just that section's code, and creates an agent that
+        only sees/modifies that section.
+
+        Args:
+            existing_code: The complete build123d code with section markers.
+            modification_prompt: The user's modification request.
+
+        Returns:
+            Tuple of (agent, target_section_name, original_code).
+            Returns (None, None, None) if no sections found or target unclear.
+        """
+        # Check if code has section markers
+        available_sections = list_sections(existing_code)
+        
+        if not available_sections:
+            logger.info("No section markers found, falling back to full-code modification")
+            return None, None, None
+        
+        # Identify which section to modify
+        target_section = identify_target_section(modification_prompt, available_sections)
+        
+        if not target_section:
+            logger.info(f"Couldn't identify target section from prompt. Available: {available_sections}")
+            return None, None, None
+        
+        # Extract just that section's code
+        section_code = get_section(existing_code, target_section)
+        
+        if not section_code:
+            logger.warning(f"Section {target_section} is empty")
+            return None, None, None
+        
+        logger.info(f"Section-based modification: targeting {target_section}")
+        
+        # Get RAG context for the modification
+        rag_context = self.get_rag_context(modification_prompt)
+        
+        # Create section-specific agent
+        agent = get_section_modifier_agent(
+            section_name=target_section,
+            section_code=section_code,
+            modification_prompt=modification_prompt,
+            rag_context=rag_context,
+            model_name=self.model_name,
+            rag_tool=self.rag_tool
+        )
+        
+        return agent, target_section, existing_code
+
+    def splice_modified_section(
+        self,
+        original_code: str,
+        section_name: str,
+        new_section_code: str
+    ) -> str:
+        """Splice a modified section back into the original code.
+        
+        Args:
+            original_code: The complete original code.
+            section_name: Name of the section that was modified.
+            new_section_code: The modified section code from the LLM.
+            
+        Returns:
+            Complete code with the section replaced.
+        """
+        return replace_section(original_code, section_name, new_section_code)
