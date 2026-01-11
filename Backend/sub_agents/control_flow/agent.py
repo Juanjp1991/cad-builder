@@ -203,12 +203,13 @@ CHECK FOR THESE ISSUES:
 3. Missing components from the specification
 4. Incorrect proportions or scale
 5. Obvious structural problems (floating parts, disconnected pieces)
+6. Feature placement errors (e.g., wheels not at corners of a car, eyes not on the face, limbs attached to wrong body parts)
 
 Original specification: {original_spec[:500]}
 
 If the model looks correct with NO visible issues, reply with 'APPROVED' followed by a friendly message describing the model.
 
-If there are ANY problems, describe them clearly so the coder can fix the geometry. Be specific about what shapes are overlapping or what parts are wrong."""
+If there are ANY problems, describe them clearly so the coder can fix the geometry. Be specific about what shapes are overlapping or what parts are misplaced."""
         
         feedback_input = Content(parts=[
             Part(text=feedback_prompt),
