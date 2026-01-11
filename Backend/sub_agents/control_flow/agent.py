@@ -16,7 +16,7 @@ import logging
 from sub_agents.designer.agent import get_designer_agent
 from sub_agents.coder.agent import get_coder_agent, CodeModifier
 from tools.renderer import render_stl
-from tools.cad_tools import create_cad_model
+from tools.cad_tools import create_cad_model, last_code_var
 
 logger = logging.getLogger(__name__)
 
@@ -409,9 +409,8 @@ If there are ANY problems, describe them clearly so the coder can fix the geomet
             yield "I'm sorry, I was unable to generate the model correctly after multiple attempts.\n"
             return
 
-        # Success! Extract code for versioning
-        code_match = re.search(r"```python(.*?)```", coder_output, re.DOTALL)
-        code = code_match.group(1).strip() if code_match else ""
+        # Success! Get code from context variable (set by create_cad_model)
+        code = last_code_var.get() or ""
 
         # Render for preview
         png_path = render_stl(stl_path)

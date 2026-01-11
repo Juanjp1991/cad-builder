@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 # Context variable to track the current task ID
 task_id_var = contextvars.ContextVar("task_id", default=None)
 
+# Context variable to store the last executed code (for version tracking)
+last_code_var = contextvars.ContextVar("last_code", default=None)
+
 OUTPUT_DIR = settings.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -86,6 +89,9 @@ def create_cad_model(script_code: str) -> dict:
     Returns:
         dict: A dictionary containing 'success', 'error', and 'files' (dict of paths).
     """
+    # Store the code for version tracking
+    last_code_var.set(script_code)
+    
     # Use task ID if available, otherwise UUID
     task_id = task_id_var.get()
     if task_id:
