@@ -195,7 +195,20 @@ class ControlFlowAgent:
         with open(png_path, "rb") as f:
             image_data = f.read()
             
-        feedback_prompt = "Here is the rendered image of the generated model. Compare it against the original specification. If it is correct, reply with 'APPROVED' followed by a friendly message to the user describing the model and any nuances (e.g. 'Here is your 3d model...'). If it is incorrect, describe what is wrong so the coder can fix it."
+        feedback_prompt = f"""Carefully inspect this 3D model render.
+
+CHECK FOR THESE ISSUES:
+1. Overlapping or duplicate geometry (shapes stacked on top of each other)
+2. Parts clipping through each other incorrectly
+3. Missing components from the specification
+4. Incorrect proportions or scale
+5. Obvious structural problems (floating parts, disconnected pieces)
+
+Original specification: {original_spec[:500]}
+
+If the model looks correct with NO visible issues, reply with 'APPROVED' followed by a friendly message describing the model.
+
+If there are ANY problems, describe them clearly so the coder can fix the geometry. Be specific about what shapes are overlapping or what parts are wrong."""
         
         feedback_input = Content(parts=[
             Part(text=feedback_prompt),
