@@ -463,7 +463,12 @@ async def a2a_regenerate(id: str, background_tasks: BackgroundTasks) -> Dict[str
 
     # Update task status and start regeneration in background
     task_manager.update_task_status(id, TaskState.WORKING)
-    background_tasks.add_task(process_a2a_task, id, prompt, task.context_id or id, "regenerate")
+    
+    # Create a NEW session for regeneration to avoid LLM caching previous response
+    import uuid
+    new_session_id = f"{id}_regen_{uuid.uuid4().hex[:8]}"
+    
+    background_tasks.add_task(process_a2a_task, id, prompt, new_session_id, "regenerate")
 
     return {"task": task}
 
