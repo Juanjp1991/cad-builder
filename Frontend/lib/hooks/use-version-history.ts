@@ -58,7 +58,7 @@ export function useVersionHistory(taskId: string | null) {
         fetchHistory();
 
         // Auto-poll for 30 seconds to catch background refine versions
-        // BUT preserve user's current version selection
+        // Auto-select NEW versions when they appear (so user sees the refined model)
         pollCountRef.current = 0;
         pollIntervalRef.current = setInterval(async () => {
             pollCountRef.current += 1;
@@ -74,9 +74,24 @@ export function useVersionHistory(taskId: string | null) {
             try {
                 const historyData = await getTaskHistory(taskId);
                 if (!cancelled) {
-                    // Only update versions list, preserve user's current version selection
                     setHistory(prev => {
                         if (!prev) return historyData;
+
+                        // Check if new versions were added
+                        const prevVersionCount = prev.versions?.length || 0;
+                        const newVersionCount = historyData.versions?.length || 0;
+
+                        if (newVersionCount > prevVersionCount) {
+                            // New version added! Auto-select the latest one
+                            console.log(`New version detected: ${prevVersionCount} -> ${newVersionCount}`);
+                            const latestVersion = historyData.versions[historyData.versions.length - 1];
+                            return {
+                                ...historyData,
+                                currentVersionId: latestVersion.id,
+                            };
+                        }
+
+                        // No new versions, preserve user's current selection
                         return {
                             ...historyData,
                             currentVersionId: prev.currentVersionId,
