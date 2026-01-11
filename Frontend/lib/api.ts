@@ -267,6 +267,31 @@ export async function regenerateTask(taskId: string): Promise<Task> {
 }
 
 /**
+ * Modifies an existing task's model and creates a new version.
+ * Uses the current version's code as base and applies the modification.
+ *
+ * @param taskId - The ID of the task to modify.
+ * @param modificationPrompt - The modification request (e.g., "make antenna longer").
+ * @returns A promise that resolves to the task with updated status.
+ */
+export async function modifyTask(taskId: string, modificationPrompt: string): Promise<Task> {
+  const response = await fetch(`${API_BASE_URL}/v1/tasks/${taskId}/modify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ modification_prompt: modificationPrompt }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to modify task");
+  }
+
+  const data = await response.json();
+  return data.task;
+}
+/**
  * Switches to a different version for viewing.
  *
  * @param taskId - The ID of the task.

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
     getTaskHistory,
     regenerateTask,
+    modifyTask,
     setTaskVersion,
     pollTask,
     getFileUrl,
@@ -204,6 +205,31 @@ export function useVersionHistory(taskId: string | null) {
         }
     }, [taskId]);
 
+    // Modify the current version with a prompt
+    const modify = useCallback(async (modificationPrompt: string) => {
+        if (!taskId) return;
+
+        setIsLoading(true);
+        setError(null);
+        try {
+            // Start modification
+            await modifyTask(taskId, modificationPrompt);
+
+            // Poll until complete
+            await pollTask(taskId);
+
+            // Refresh history to get the new version
+            const updatedHistory = await getTaskHistory(taskId);
+            setHistory(updatedHistory);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Failed to modify";
+            setError(errorMessage);
+            console.error("Failed to modify:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [taskId]);
+
     // Refresh history manually
     const refreshHistory = useCallback(async () => {
         if (!taskId) return;
@@ -245,6 +271,7 @@ export function useVersionHistory(taskId: string | null) {
         goToPrevious,
         goToNext,
         regenerate,
+        modify,
         refreshHistory,
         getVersionStlUrl,
     };

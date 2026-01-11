@@ -8,6 +8,7 @@ import os
 import logging
 from typing import Dict
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from pydantic import BaseModel as PydanticBaseModel
 
 from a2a.models import (
     SendMessageRequest, Task, TaskStatus, TaskState, Message, Role, Part, FilePart,
@@ -162,6 +163,93 @@ async def process_a2a_task(
 
     finally:
         # Reset the context variable
+        task_id_var.reset(token)
+
+
+async def process_modify_version_task(
+    task_id: str,
+    original_prompt: str,
+    existing_code: str,
+    modification_prompt: str,
+    session_id: str
+) -> None:
+    """Process a modification request and add result as new version.
+
+    Args:
+        task_id: The task ID to add the version to.
+        original_prompt: The original generation prompt.
+        existing_code: The current code to modify.
+        modification_prompt: The user's modification request.
+        session_id: Unique session ID for this modification.
+    """
+    logger.info(f"Processing modification for task {task_id}: {modification_prompt[:50]}...")
+
+    # Set the task ID in the context variable so tools can use it
+    token = task_id_var.set(task_id)
+
+    try:
+        final_response = ""
+        
+        # Execute the modification agent workflow
+        async for response_chunk in run_modification_agent(
+            existing_code=existing_code,
+            modification_prompt=modification_prompt,
+            session_id=session_id
+        ):
+            final_response = response_chunk
+
+        # Check for generated files
+        file_parts = _find_generated_files(task_id, settings.OUTPUT_DIR)
+        
+        if file_parts:
+            # Extract STL and STEP paths
+            stl_path = None
+            step_path = None
+            for part in file_parts:
+                if part.file and part.file.file_with_uri:
+                    filename = part.file.file_with_uri.replace("/download/", "")
+                    full_path = os.path.join(settings.OUTPUT_DIR, filename)
+                    if filename.endswith(".stl"):
+                        stl_path = full_path
+                    elif filename.endswith(".step"):
+                        step_path = full_path
+            
+            # Add as new version with type "modification"
+            if stl_path:
+                task_manager.add_version(
+                    task_id=task_id,
+                    prompt=f"{original_prompt} [Modified: {modification_prompt}]",
+                    code=existing_code,  # Will be updated if we get the new code
+                    stl_path=stl_path,
+                    step_path=step_path,
+                    version_type="modification",
+                    approved=True,
+                    designer_feedback=f"Modified: {modification_prompt}"
+                )
+                logger.info(f"Version added to task {task_id}: type=modification")
+
+        # Mark task as completed
+        parts = [Part(text=final_response)] + file_parts
+        response_message = Message(role=Role.AGENT, parts=parts)
+        
+        if file_parts:
+            task = task_manager.get_task(task_id)
+            if task:
+                from a2a.models import Artifact
+                task.artifacts = Artifact(parts=file_parts)
+        
+        task_manager.update_task_status(task_id, TaskState.COMPLETED, response_message)
+        logger.info(f"Modification task {task_id} completed successfully")
+
+    except Exception as e:
+        logger.error(f"Modification task {task_id} failed: {e}")
+        response_message = Message(
+            role=Role.AGENT,
+            parts=[Part(text=f"Modification failed: {str(e)}")]
+        )
+        task_manager.update_task_status(task_id, TaskState.FAILED, response_message)
+
+    finally:
         task_id_var.reset(token)
 
 
@@ -469,6 +557,68 @@ async def a2a_regenerate(id: str, background_tasks: BackgroundTasks) -> Dict[str
     new_session_id = f"{id}_regen_{uuid.uuid4().hex[:8]}"
     
     background_tasks.add_task(process_a2a_task, id, prompt, new_session_id, "regenerate")
+
+    return {"task": task}
+
+
+class ModifyRequest(PydanticBaseModel):
+    """Request body for task modification."""
+    modification_prompt: str
+
+
+@router.post("/v1/tasks/{id}/modify")
+async def a2a_modify(id: str, request: ModifyRequest, background_tasks: BackgroundTasks) -> Dict[str, Task]:
+    """Modify an existing task's model and create a new version.
+
+    This endpoint modifies the current version's code based on the modification
+    prompt and creates a new version with the modified result.
+
+    Args:
+        id (str): The task identifier.
+        request (ModifyRequest): The modification request with prompt.
+        background_tasks (BackgroundTasks): FastAPI background tasks handler.
+
+    Returns:
+        Dict[str, Task]: A dictionary containing the task with updated status.
+
+    Raises:
+        HTTPException: If the task, history, or code is not found.
+    """
+    task = task_manager.get_task(id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    history = task_manager.get_history(id)
+    if not history:
+        raise HTTPException(status_code=404, detail="No version history found for this task")
+
+    current_version = history.get_current_version()
+    if not current_version:
+        raise HTTPException(status_code=400, detail="No current version to modify")
+
+    if not current_version.code:
+        raise HTTPException(status_code=400, detail="Current version has no code to modify")
+
+    logger.info(
+        f"Modifying task {id} with prompt: {request.modification_prompt[:50]}...",
+        extra={"type": "modify", "task_id": id}
+    )
+
+    # Update task status and start modification in background
+    task_manager.update_task_status(id, TaskState.WORKING)
+    
+    # Create a NEW session for modification
+    import uuid
+    new_session_id = f"{id}_modify_{uuid.uuid4().hex[:8]}"
+    
+    background_tasks.add_task(
+        process_modify_version_task,
+        id,
+        current_version.prompt,
+        current_version.code,
+        request.modification_prompt,
+        new_session_id
+    )
 
     return {"task": task}
 
