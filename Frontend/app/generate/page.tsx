@@ -15,7 +15,7 @@ import { AdvancedModeToggle } from "@/components/generate/advanced-mode-toggle";
 import { ModificationModal } from "@/components/generate/modification-modal";
 import { Button } from "@/components/ui/button";
 import { useGenerationStore, type GenerationStage } from "@/lib/stores/useGenerationStore";
-import { generateLegoModel } from "@/lib/api";
+import { generateLegoModel, modifyTask, pollTask, getTaskHistory, getFileUrl } from "@/lib/api";
 import { db } from "@/lib/db";
 import { hashImagesWithPrompt } from "@/lib/utils/image-hash";
 import { useFirstBuild } from "@/lib/hooks/use-first-build";
@@ -294,12 +294,45 @@ export default function GeneratePage(): React.JSX.Element {
   const handleModificationSubmit = useCallback(async (modificationPrompt: string): Promise<void> => {
     if (!prompt) return;
 
-    // Create combined prompt: original + modification
-    const combinedPrompt = `${prompt}\n\nModification: ${modificationPrompt}`;
+    // If we have a model with a taskId, use the modify endpoint to create a new version
+    if (model?.taskId) {
+      try {
+        startGeneration(prompt, mode, images);
+        setStage("imagining");
 
-    // Regenerate with the modified prompt
-    handleGenerate(combinedPrompt, images, true); // bypass cache for modifications
-  }, [prompt, images, handleGenerate]);
+        // Call modify API to create new version
+        await modifyTask(model.taskId, modificationPrompt);
+
+        setStage("building");
+
+        // Wait for completion
+        await pollTask(model.taskId);
+
+        // Get updated history to get the latest STL
+        const history = await getTaskHistory(model.taskId);
+        const latestVersion = history.versions[history.versions.length - 1];
+
+        if (latestVersion?.stl_path) {
+          const stlUrl = getFileUrl(latestVersion.stl_path.split('/').pop() || '');
+          completeGeneration({
+            taskId: model.taskId,
+            stlUrl,
+            prompt: `${prompt} [Modified: ${modificationPrompt}]`,
+            code: latestVersion.code,
+          });
+        } else {
+          failGeneration("Modification completed but no model found");
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Modification failed";
+        failGeneration(errorMsg);
+      }
+    } else {
+      // No existing model, fall back to new generation with combined prompt
+      const combinedPrompt = `${prompt}\n\nModification: ${modificationPrompt}`;
+      handleGenerate(combinedPrompt, images, true);
+    }
+  }, [prompt, images, model, mode, handleGenerate, startGeneration, setStage, completeGeneration, failGeneration]);
 
   /**
    * Handles starting fresh (reset).
