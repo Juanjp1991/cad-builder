@@ -1,0 +1,63 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest",
+    "check": "gts check",
+    "clean": "gts clean",
+    "fix": "eslint --fix \"app/**/*.{ts,tsx}\" \"components/**/*.{ts,tsx}\" \"lib/**/*.{ts,tsx}\""
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-progress": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.0",
+    "@types/three": "^0.181.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dexie": "^4.2.1",
+    "dexie-react-hooks": "^4.2.0",
+    "framer-motion": "^12.23.24",
+    "idb-keyval": "^6.2.2",
+    "lucide-react": "^0.554.0",
+    "next": "^16.0.7",
+    "next-themes": "^0.4.6",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.4.0",
+    "three": "^0.181.2",
+    "three-stdlib": "^2.29.4",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.1",
+    "autoprefixer": "^10.4.23",
+    "eslint": "^9",
+    "eslint-config-next": "^16.0.7",
+    "fake-indexeddb": "^6.2.5",
+    "gts": "^6.0.2",
+    "jsdom": "^22.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5",
+    "vitest": "^4.0.14"
+  }
+}
