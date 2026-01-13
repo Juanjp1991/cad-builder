@@ -15,7 +15,7 @@ import { AdvancedModeToggle } from "@/components/generate/advanced-mode-toggle";
 import { ModificationModal } from "@/components/generate/modification-modal";
 import { Button } from "@/components/ui/button";
 import { useGenerationStore, type GenerationStage } from "@/lib/stores/useGenerationStore";
-import { generateLegoModel, modifyTask, pollTask, getTaskHistory, getFileUrl } from "@/lib/api";
+import { generateLegoModel, modifyTask, pollTask, getTask, getTaskHistory, getFileUrl } from "@/lib/api";
 import { db } from "@/lib/db";
 import { hashImagesWithPrompt } from "@/lib/utils/image-hash";
 import { useFirstBuild } from "@/lib/hooks/use-first-build";
@@ -312,13 +312,29 @@ export default function GeneratePage(): React.JSX.Element {
         const history = await getTaskHistory(model.taskId);
         const latestVersion = history.versions[history.versions.length - 1];
 
-        if (latestVersion?.stl_path) {
-          const stlUrl = getFileUrl(latestVersion.stl_path.split('/').pop() || '');
+        // Try to get STL from version history first
+        let stlUrl: string | undefined;
+        if (latestVersion?.stlPath) {
+          stlUrl = getFileUrl(latestVersion.stlPath.split('/').pop() || '');
+        }
+
+        // Fallback: check task artifacts if no STL in version
+        if (!stlUrl) {
+          const completedTask = await getTask(model.taskId);
+          const stlPart = completedTask.artifacts?.parts?.find(
+            (p) => p.file?.mediaType === "model/stl" || p.file?.fileWithUri?.endsWith(".stl")
+          );
+          if (stlPart?.file?.fileWithUri) {
+            stlUrl = getFileUrl(stlPart.file.fileWithUri);
+          }
+        }
+
+        if (stlUrl) {
           completeGeneration({
             taskId: model.taskId,
             stlUrl,
             prompt: `${prompt} [Modified: ${modificationPrompt}]`,
-            code: latestVersion.code,
+            code: latestVersion?.code,
           });
         } else {
           failGeneration("Modification completed but no model found");
